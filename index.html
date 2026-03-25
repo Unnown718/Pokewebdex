@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Pokedex GOD</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<style>
+body {
+  background:#111;
+  font-family:Arial;
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  height:100vh;
+}
+
+.pokedex {
+  width:380px;
+  background:#d32f2f;
+  border-radius:20px;
+  padding:15px;
+  box-shadow:0 0 40px black;
+}
+
+.screen {
+  background:#9ef01a;
+  border-radius:10px;
+  padding:10px;
+  margin-bottom:5px;
+  height:170px;
+  overflow:auto;
+  color:black;
+}
+
+.controls {
+  display:flex;
+  flex-wrap:wrap;
+  gap:5px;
+}
+
+input {
+  flex:1;
+  padding:8px;
+  border:none;
+  border-radius:5px;
+}
+
+button, select {
+  padding:8px;
+  border:none;
+  border-radius:5px;
+  background:black;
+  color:white;
+  cursor:pointer;
+}
+
+/* Animación para todos los Pokémon */
+.pokemon-img {
+  width:80px;
+  display:block;
+  margin:auto;
+  animation:float-rotate 2s ease-in-out infinite;
+}
+
+@keyframes float-rotate {
+  0% { transform: translateY(0px) rotate(0deg); }
+  25% { transform: translateY(-6px) rotate(-5deg); }
+  50% { transform: translateY(0px) rotate(0deg); }
+  75% { transform: translateY(-6px) rotate(5deg); }
+  100% { transform: translateY(0px) rotate(0deg); }
+}
+
+/* stats */
+.bar {
+  height:6px;
+  background:#333;
+  margin:3px 0;
+}
+
+.fill {
+  height:100%;
+  background:#2ed573;
+  width:0;
+  transition:1s;
+}
+
+.fav {
+  color:gold;
+  font-weight:bold;
+}
+
+/* loader Pokébola */
+.loader {
+  width: 40px;
+  height: 40px;
+  border: 5px solid #fff;
+  border-top: 5px solid #f00;
+  border-bottom: 5px solid #000;
+  border-radius: 50%;
+  position: relative;
+  margin: auto;
+  animation: spin 1s linear infinite;
+}
+
+.loader::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 20px;
+  height: 20px;
+  background: #fff;
+  border: 5px solid #000;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+}
+
+@keyframes spin {
+  100% {transform:rotate(360deg);}
+}
+</style>
+</head>
+
+<body>
+
+<div class="pokedex">
+
+  <div id="top" class="screen"></div>
+  <div id="bottom" class="screen">Search a Pokémon...</div>
+
+  <div class="controls">
+    <input id="name" placeholder="pikachu">
+    <button onclick="search()">GO</button>
+    <button onclick="random()">🎲</button>
+    <button onclick="saveFav()">⭐</button>
+    <button onclick="showFav()">📂</button>
+
+    <select id="lang">
+      <option value="en">EN</option>
+      <option value="es">ES</option>
+    </select>
+  </div>
+
+</div>
+
+<script>
+// sonido botón
+function clickSound(){
+  new Audio("https://www.myinstants.com/media/sounds/click.mp3").play();
+}
+
+// sonido pokemon
+function cry(id){
+  new Audio(`https://raw.githubusercontent.com/PokeAPI/cries/main/cries/pokemon/latest/${id}.ogg`).play();
+}
+
+// loading
+function showLoading(){
+  document.getElementById("bottom").innerHTML = `
+    <div style="text-align:center;">
+      <div class="loader"></div>
+      <p>Loading...</p>
+    </div>
+  `;
+}
+
+// buscar
+async function search(nameInput){
+  clickSound();
+  showLoading();
+
+  const name = nameInput || document.getElementById("name").value.toLowerCase();
+  const lang = document.getElementById("lang").value;
+
+  try{
+    const res = await fetch(`https://pokeapi.co/api/v2/pokemon/${name}`);
+    const data = await res.json();
+
+    const species = await (await fetch(data.species.url)).json();
+
+    let entry = species.flavor_text_entries.find(e=>e.language.name===lang);
+    if(!entry) entry = species.flavor_text_entries.find(e=>e.language.name==="en");
+
+    const desc = entry.flavor_text.replace(/\n/g," ");
+
+    // evoluciones
+    const evoRes = await fetch(species.evolution_chain.url);
+    const evoData = await evoRes.json();
+
+    let evo = evoData.chain;
+    let list = [];
+
+    do {
+      list.push(evo.species.name);
+      evo = evo.evolves_to[0];
+    } while (evo);
+
+    const evoImgs = await Promise.all(list.map(async e=>{
+      const r = await fetch(`https://pokeapi.co/api/v2/pokemon/${e}`);
+      const d = await r.json();
+      return `<img onclick="search('${e}')" src="${d.sprites.front_default}" title="${e}" class="pokemon-img">`;
+    }));
+
+    // stats
+    const statsHTML = data.stats.map(s=>`
+      ${s.stat.name}: ${s.base_stat}
+      <div class="bar"><div class="fill" style="width:${s.base_stat}px"></div></div>
+    `).join("");
+
+    document.getElementById("bottom").innerHTML = `
+      <h3>#${data.id} ${data.name.toUpperCase()}</h3>
+
+      <img onclick="cry(${data.id})" src="${data.sprites.front_default}" class="pokemon-img">
+      <img src="${data.sprites.front_shiny}" class="pokemon-img">
+
+      <p><strong>Type:</strong> ${data.types.map(t=>t.type.name).join(", ")}</p>
+      <p><strong>Abilities:</strong> ${data.abilities.map(a=>a.ability.name).join(", ")}</p>
+      <p><strong>Height:</strong> ${data.height} | <strong>Weight:</strong> ${data.weight}</p>
+
+      ${statsHTML}
+    `;
+
+    document.getElementById("top").innerHTML = `
+      <p>${desc}</p>
+      <h4>Evolution Chain</h4>
+      <div>${evoImgs.join(" ➜ ")}</div>
+    `;
+
+  }catch{
+    document.getElementById("bottom").innerHTML="Not found ❌";
+  }
+}
+
+// random
+function random(){
+  search(Math.floor(Math.random()*898)+1);
+}
+
+// favoritos
+function saveFav(){
+  const name=document.getElementById("name").value.toLowerCase();
+  if(!name) return;
+
+  let favs=JSON.parse(localStorage.getItem("favs"))||[];
+
+  if(!favs.includes(name)){
+    favs.push(name);
+    localStorage.setItem("favs",JSON.stringify(favs));
+  }
+}
+
+function showFav(){
+  let favs=JSON.parse(localStorage.getItem("favs"))||[];
+
+  if(favs.length===0){
+    document.getElementById("top").innerHTML="<p>No favorites yet ⭐</p>";
+    return;
+  }
+
+  document.getElementById("top").innerHTML = `
+    <h3>⭐ Favorites</h3>
+    ${favs.map(f=>`<button onclick="search('${f}')">${f}</button>`).join("")}
+  `;
+}
+
+// PWA
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.register('sw.js').catch(()=>{});
+}
+</script>
+
+</body>
+</html>
